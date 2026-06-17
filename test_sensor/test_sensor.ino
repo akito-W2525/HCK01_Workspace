@@ -1,28 +1,25 @@
 // --- ピン定義 ---
-const int SENSOR_PIN = A0; 
-const int MOTOR_IN1 = 9;   
-const int MOTOR_IN2 = 10;  
+const int SENSOR_PIN = A0; // フォトインタラプタのアナログピン
+const int MOTOR_IN1 = 9;   // モータードライバ IN1
+const int MOTOR_IN2 = 10;  // モータードライバ IN2
 
 // --- しきい値と状態管理 ---
-const int THRESHOLD = 300;     
-bool lastSensorState = false;  
-unsigned long lastPulseTime = 0; 
-bool pulseDetected = false;    
+const int THRESHOLD = 300;     // 50と600の中間あたり
+bool lastSensorState = false;  // 前回のセンサ状態
+unsigned long lastPulseTime = 0; // チャタリング防止用
+bool pulseDetected = false;    // 拍検知フラグ
 
 // --- 拍カウントとBPM計算用変数 ---
-int slitCount = 0;                  
-unsigned long previousSlitTime = 0; 
-float currentBPM = 0.0;             
-unsigned long currentDuration = 0;  
+int slitCount = 0;                  // スリットの通過回数を数える
+unsigned long previousSlitTime = 0; // スリット間隔（duration）計測用
+float currentBPM = 0.0;             // 計算された現在のBPM
+unsigned long currentDuration = 0;  // ★追加：計算された現在のスリット間隔(マイクロ秒)
 int beatcount  = 37;
 
 // --- PIDとPWM用変数 ---
 int currentPWM = 0;
-float targetBPM = 120.0; // ★初期の目標BPM
-// ★チューニング用のパラメータ（まずはPだけ入れてテストします）
-float Kp = 1.0;  // 比例（現在のズレに対するパワー）
-float Ki = 0.1;  // 積分（過去のズレの蓄積に対するパワー）
-float Kd = 0.05; // 微分（急激な変化に対するブレーキ）
+float targetBPM = 120.0;       
+float Kp = 1.0, Ki = 0.1, Kd = 0.05;
 float integral = 0, previous_error = 0;
 
 void setup() {
@@ -30,15 +27,9 @@ void setup() {
   pinMode(MOTOR_IN1, OUTPUT);
   pinMode(MOTOR_IN2, OUTPUT);
 
-  Serial.println("=====================================");
-  Serial.println("  PID Control Test Ready.");
-  Serial.println("  シリアルモニタから以下の数字を送信して目標BPMを変更できる：");
-  Serial.println("  [1] : Target BPM 100");
-  Serial.println("  [2] : Target BPM 120");
-  Serial.println("  [3] : Target BPM 140");
-  Serial.println("=====================================");
+  Serial.println("Motor & Sensor Integration Test Ready.");
   
-  // モーターを初期スピードで回し始めます
+  // モーターを定速で回し始めます（200は適宜調整してください）
   updatePWM(135); 
 }
 
@@ -46,49 +37,40 @@ void loop() {
   // 1. 常にセンサの値を読み取る
   receivePulse();
 
-  // 2. シリアルモニタからの目標BPM変更を受け付ける
-  if (Serial.available() > 0) {
-    char cmd = Serial.read();
-    if (cmd == '1') targetBPM = 100.0;
-    if (cmd == '2') targetBPM = 120.0;
-    if (cmd == '3') targetBPM = 140.0;
-    
-    if (cmd == '1' || cmd == '2' || cmd == '3') {
-      Serial.print("\n>>> 目標BPMを [");
-      Serial.print(targetBPM);
-      Serial.println("] に変更しました <<<\n");
-    }
-  }
-
-  // 3. 拍（スリット）が検知されたら実行される処理
+  // 2. 拍（スリット）が検知されたら実行される処理
   if (pulseDetected) {
     pulseDetected = false; // フラグをリセット
     
-    // 【PIDの働きを可視化する表示】
-    Serial.print("Target:");
-    Serial.print(targetBPM);
-    Serial.print(" | Current:");
-    Serial.print(currentBPM);
-    Serial.print(" | PWM:");
-    Serial.println(currentPWM); // PIDが計算した結果のパワー
+    // 【修正】スリット間隔(マイクロ秒)の表示を追加
+    Serial.print("S:");
+    Serial.print(slitCount);
+    Serial.print(" D(us):");
+    Serial.print(currentDuration);
+    Serial.print(" BPM:");
+    Serial.println(currentBPM);
 
+    // 32回読み取ったら「1拍完了」の特別な表示を出す
     if (slitCount >= beatcount) {
-      slitCount = 0; 
+      slitCount = 0; // カウンターをリセットして次の拍へ
+      
+      // 処理落ちを防ぐため、短い文字に変更
       Serial.println("★Beat!"); 
     }
   }
 }
 
 // ==========================================
-// 1. receivePulse() : アナログ読み取りとエッジ検出
+// 1. receivePulse() : アナログ読み取りとエッジ検出 (超高精度版)
 // ==========================================
 void receivePulse() {
   int sensorValue = analogRead(SENSOR_PIN);
   bool currentSensorState = (sensorValue > THRESHOLD);
 
   if (!lastSensorState && currentSensorState) {
+    // micros() を使う（マイクロ秒単位で取得）
     unsigned long currentTime = micros(); 
     
+    // チャタリング防止の10msを、マイクロ秒（10,000us）に直す
     if (currentTime - lastPulseTime > 1000) {
       pulseDetected = true; 
       lastPulseTime = currentTime;
@@ -96,15 +78,15 @@ void receivePulse() {
       unsigned long duration = currentTime - previousSlitTime;
       previousSlitTime = currentTime;
 
+      // 上限の2000msも、マイクロ秒（2,000,000us）に直す
       if (duration > 0 && duration < 2000000) {
+        // ★ループで表示するためにグローバル変数に保存
         currentDuration = duration; 
         
-        // BPMの計算 (8分音符基準)
+        // 計算用定数を1000倍する (1875.0 * 1000 = 1875000.0)
         currentBPM = ( 60000000.0 / ((float)duration * beatcount*2));
-        slitCount++;
 
-        // ★★★ここで毎スリットPIDを呼び出し、モーター速度を自動調整する★★★
-        updatePID(targetBPM, currentBPM);
+        slitCount++;
       }
     }
   }
@@ -128,10 +110,6 @@ void updatePWM(int pwmValue) {
 int updatePID(float targetBPM, float currentBPM) {
   float error = targetBPM - currentBPM;
   integral += error;
-  
-  // 積分(I)の暴走（ワインドアップ）を防ぐための安全制限を追加
-  integral = constrain(integral, -200, 200);
-
   float derivative = error - previous_error;
 
   float output = (Kp * error) + (Ki * integral) + (Kd * derivative);
