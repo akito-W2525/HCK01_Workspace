@@ -35,7 +35,7 @@ void setup() {
   Serial.println("Target,Current,PWM"); 
   
   // 初期ベースパワーで回り始める
-  updatePWM(40); 
+  updatePWM(45); 
 }
 
 void loop() {

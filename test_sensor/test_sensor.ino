@@ -14,7 +14,7 @@ int slitCount = 0;                  // スリットの通過回数を数える
 unsigned long previousSlitTime = 0; // スリット間隔（duration）計測用
 float currentBPM = 0.0;             // 計算された現在のBPM
 unsigned long currentDuration = 0;  // ★追加：計算された現在のスリット間隔(マイクロ秒)
-int beatcount  = 37;
+int beatcount  = 40;
 
 // --- PIDとPWM用変数 ---
 int currentPWM = 0;
