@@ -14,14 +14,14 @@ int slitCount = 0;
 unsigned long previousSlitTime = 0; 
 float currentBPM = 0.0;             
 unsigned long currentDuration = 0;  
-int beatcount  = 56;
+int beatcount  =40;
 
 // --- PIDとPWM用変数 ---
 int currentPWM = 0;
 float targetBPM = 120.0; 
 // ★ゲイン調整用パラメータ
 float Kp = 0.01;  // 比例
-float Ki = 0;  // 積分
+float Ki = 0.001;  // 積分
 float Kd = 0; // 微分
 float integral = 0, previous_error = 0;
 
