@@ -14,15 +14,15 @@ int slitCount = 0;
 unsigned long previousSlitTime = 0; 
 float currentBPM = 0.0;             
 unsigned long currentDuration = 0;  
-int beatcount  =40;
+int beatcount  = 40;
 
 // --- PIDとPWM用変数 ---
 int currentPWM = 0;
 float targetBPM = 120.0; 
 // ★ゲイン調整用パラメータ
-float Kp = 0.01;  // 比例
-float Ki = 0.001;  // 積分
-float Kd = 0; // 微分
+float Kp = 0.3;  // 比例
+float Ki = 0.1;  // 積分
+float Kd = 0.01; // 微分
 float integral = 0, previous_error = 0;
 
 void setup() {
@@ -33,7 +33,7 @@ void setup() {
   // プロッタのノイズになるため、初期のテキストは最小限にします
   Serial.println("Target,Current,PWM"); 
   
-  updatePWM(135); 
+  updatePWM(80); 
 }
 
 void loop() {
@@ -106,31 +106,43 @@ void receivePulse() {
 }
 
 // ==========================================
-// 2. updatePWM() : モーター出力制御関数
+// 2. updatePWM() : 自動ブレーキ機能付き
 // ==========================================
 void updatePWM(int pwmValue) {
-  pwmValue = constrain(pwmValue, 0, 255);
-  analogWrite(MOTOR_IN1, pwmValue);
-  digitalWrite(MOTOR_IN2, LOW);
-  currentPWM = pwmValue;
+  // もしPIDが「パワーを0以下にしろ(減速しろ)」と指示してきたらショートブレーキ！
+  if (pwmValue <= 0) {
+    digitalWrite(MOTOR_IN1, HIGH);
+    digitalWrite(MOTOR_IN2, HIGH);
+    currentPWM = 0;
+  } 
+  // 通常の加速・等速回転時
+  else {
+    pwmValue = constrain(pwmValue, 0, 255);
+    analogWrite(MOTOR_IN1, pwmValue);
+    digitalWrite(MOTOR_IN2, LOW);
+    currentPWM = pwmValue;
+  }
 }
 
 // ==========================================
-// 3. updatePID() : 回転速度安定化関数
+// 3. updatePID() : ベースパワー追加版
 // ==========================================
 int updatePID(float targetBPM, float currentBPM) {
   float error = targetBPM - currentBPM;
   integral += error;
   
-  integral = constrain(integral, -200, 200);
+  // 【修正】I項（積分）がしっかりパワーを出せるように制限枠を大きく広げる
+  integral = constrain(integral, -2000, 2000);
 
   float derivative = error - previous_error;
 
-  float output = (Kp * error) + (Ki * integral) + (Kd * derivative);
+  // 【修正】80だと速すぎるため、120BPMに近くなるような小さめの基準値に変更
+  int basePWM = 40; 
+
+  float output = basePWM + (Kp * error) + (Ki * integral) + (Kd * derivative);
   previous_error = error;
 
-  int newPWM = currentPWM + (int)output;
-  newPWM = constrain(newPWM, 0, 255);
+  int newPWM = (int)output; 
 
   updatePWM(newPWM);
   return newPWM;
