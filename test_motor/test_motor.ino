@@ -1,5 +1,6 @@
 // --- ピン定義 ---
 const int SENSOR_PIN = A0; 
+const int POT_PIN = A1;    // ★追加：可変抵抗のアナログピン
 const int MOTOR_IN1 = 9;   
 const int MOTOR_IN2 = 10;  
 
@@ -19,7 +20,7 @@ int beatcount  = 40;
 // --- PIDとPWM用変数 ---
 int currentPWM = 0;
 float targetBPM = 120.0; 
-// ★ゲイン調整用パラメータ
+// ★決定したゲインパラメータ
 float Kp = 0.3;  // 比例
 float Ki = 0.1;  // 積分
 float Kd = 0.01; // 微分
@@ -33,28 +34,21 @@ void setup() {
   // プロッタのノイズになるため、初期のテキストは最小限にします
   Serial.println("Target,Current,PWM"); 
   
-  updatePWM(80); 
+  // 初期ベースパワーで回り始める
+  updatePWM(40); 
 }
 
 void loop() {
   // 1. 常にセンサの値を読み取る
   receivePulse();
 
-  // 2. シリアルプロッタの送信欄から目標BPM変更を受け付ける
-  if (Serial.available() > 0) {
-    char cmd = Serial.read();
-    if (cmd == '1') targetBPM = 100.0;
-    if (cmd == '2') targetBPM = 120.0;
-    if (cmd == '3') targetBPM = 140.0;
-    // ※グラフ乱れ防止のため、変更時のテキスト出力は削除しています
-  }
+  // ※シリアルからの文字受信（1,2,3）は削除し、可変抵抗に任せます
 
-  // 3. 拍（スリット）が検知されたら実行される処理
+  // 2. 拍（スリット）が検知されたら実行される処理
   if (pulseDetected) {
     pulseDetected = false; 
     
     // 【シリアルプロッタ用の表示形式】
-    // 形式: Target:120.0,Current:115.0,PWM:135
     Serial.print("Target:");
     Serial.print(targetBPM);
     Serial.print(",");
@@ -66,8 +60,6 @@ void loop() {
 
     if (slitCount >= beatcount) {
       slitCount = 0; 
-      // プロッタのスケールが崩れるのを防ぐため、文字出力をコメントアウト
-      // Serial.println("★Beat!"); 
     }
   }
 }
@@ -93,8 +85,11 @@ void receivePulse() {
         currentDuration = duration; 
         
         // BPMの計算 (8分音符基準)
-        currentBPM = ( 60000000.0 / ((float)duration * beatcount*2));
+        currentBPM = ( 60000000.0 / ((float)duration * beatcount * 2));
         slitCount++;
+
+        // ★追加：毎スリットごとに可変抵抗を読み取って目標BPMを更新する
+        targetBPM = readTargetBPM();
 
         // 毎スリットPIDを呼び出し、モーター速度を自動調整
         updatePID(targetBPM, currentBPM);
@@ -109,13 +104,11 @@ void receivePulse() {
 // 2. updatePWM() : 自動ブレーキ機能付き
 // ==========================================
 void updatePWM(int pwmValue) {
-  // もしPIDが「パワーを0以下にしろ(減速しろ)」と指示してきたらショートブレーキ！
   if (pwmValue <= 0) {
     digitalWrite(MOTOR_IN1, HIGH);
     digitalWrite(MOTOR_IN2, HIGH);
     currentPWM = 0;
   } 
-  // 通常の加速・等速回転時
   else {
     pwmValue = constrain(pwmValue, 0, 255);
     analogWrite(MOTOR_IN1, pwmValue);
@@ -131,12 +124,10 @@ int updatePID(float targetBPM, float currentBPM) {
   float error = targetBPM - currentBPM;
   integral += error;
   
-  // 【修正】I項（積分）がしっかりパワーを出せるように制限枠を大きく広げる
   integral = constrain(integral, -2000, 2000);
 
   float derivative = error - previous_error;
 
-  // 【修正】80だと速すぎるため、120BPMに近くなるような小さめの基準値に変更
   int basePWM = 40; 
 
   float output = basePWM + (Kp * error) + (Ki * integral) + (Kd * derivative);
@@ -158,4 +149,17 @@ void ReverseBrake() {
   digitalWrite(MOTOR_IN1, HIGH);
   digitalWrite(MOTOR_IN2, HIGH);
   currentPWM = 0;
+}
+
+// ==========================================
+// ★追加 5. readTargetBPM() : 目標BPM読み取り関数
+// ==========================================
+float readTargetBPM() {
+  int rawValue = analogRead(POT_PIN); // 0 〜 1023 を取得
+  
+  // 0〜1023のアナログ値を、BPM 100 〜 160 の範囲に変換する
+  // ※可変抵抗の向きが逆(回すと下がる)場合は、map(rawValue, 0, 1023, 160, 100); にしてください
+  long mappedBPM = map(rawValue, 0, 1023, 100, 160);
+  
+  return (float)mappedBPM;
 }
