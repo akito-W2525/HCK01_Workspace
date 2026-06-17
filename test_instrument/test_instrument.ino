@@ -66,3 +66,7 @@ void receivePulse() {
         slitCount++;
       }
     }
+  }
+  
+  lastSensorState = currentSensorState;
+}
