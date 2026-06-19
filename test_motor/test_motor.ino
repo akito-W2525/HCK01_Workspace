@@ -21,9 +21,9 @@ int beatcount  = 40;
 int currentPWM = 0;
 float targetBPM = 120.0; 
 // ★決定したゲインパラメータ
-float Kp = 0.3;  // 比例
-float Ki = 0.1;  // 積分
-float Kd = 0.01; // 微分
+float Kp = 0.05;  // 比例
+float Ki = 0.02;  // 積分
+float Kd = 0; // 微分
 float integral = 0, previous_error = 0;
 
 void setup() {
@@ -31,11 +31,11 @@ void setup() {
   pinMode(MOTOR_IN1, OUTPUT);
   pinMode(MOTOR_IN2, OUTPUT);
 
-  // プロッタのノイズになるため、初期のテキストは最小限にします
   Serial.println("Target,Current,PWM"); 
   
-  // 初期ベースパワーで回り始める
-  updatePWM(45); 
+  // 初期ベースパワーで回り始める（ブースト）
+  updatePWM(85); 
+  delay(800); // ★追加：最初の0.5秒間はフルパワーで勢いをつける！
 }
 
 void loop() {
@@ -64,7 +64,7 @@ void loop() {
   }
 }
 
-// ==========================================
+/// ==========================================
 // 1. receivePulse() : アナログ読み取りとエッジ検出
 // ==========================================
 void receivePulse() {
@@ -78,21 +78,27 @@ void receivePulse() {
       pulseDetected = true; 
       lastPulseTime = currentTime;
 
-      unsigned long duration = currentTime - previousSlitTime;
-      previousSlitTime = currentTime;
+      // ★追加：最初の1回目の検知は、時間を記録するだけでスキップする
+      if (previousSlitTime == 0) {
+        previousSlitTime = currentTime;
+      } 
+      else {
+        unsigned long duration = currentTime - previousSlitTime;
+        previousSlitTime = currentTime;
 
-      if (duration > 0 && duration < 2000000) {
-        currentDuration = duration; 
-        
-        // BPMの計算 (8分音符基準)
-        currentBPM = ( 60000000.0 / ((float)duration * beatcount * 2));
-        slitCount++;
+        if (duration > 0 && duration < 2000000) {
+          currentDuration = duration; 
+          
+          // BPMの計算 (8分音符基準)
+          currentBPM = ( 60000000.0 / ((float)duration * beatcount * 2));
+          slitCount++;
 
-        // ★追加：毎スリットごとに可変抵抗を読み取って目標BPMを更新する
-        targetBPM = readTargetBPM();
+          // 毎スリットごとに可変抵抗を読み取って目標BPMを更新する
+          targetBPM = readTargetBPM();
 
-        // 毎スリットPIDを呼び出し、モーター速度を自動調整
-        updatePID(targetBPM, currentBPM);
+          // 毎スリットPIDを呼び出し、モーター速度を自動調整
+          updatePID(targetBPM, currentBPM);
+        }
       }
     }
   }
