@@ -34,15 +34,13 @@ void setup() {
   Serial.println("Target,Current,PWM"); 
   
   // 初期ベースパワーで回り始める（ブースト）
-  updatePWM(85); 
-  delay(800); // ★追加：最初の0.5秒間はフルパワーで勢いをつける！
+  updatePWM(100); 
+  delay(800); // ★追加：最初の0.8秒間はフルパワーで勢いをつける
 }
 
 void loop() {
   // 1. 常にセンサの値を読み取る
   receivePulse();
-
-  // ※シリアルからの文字受信（1,2,3）は削除し、可変抵抗に任せます
 
   // 2. 拍（スリット）が検知されたら実行される処理
   if (pulseDetected) {
@@ -64,13 +62,26 @@ void loop() {
   }
 }
 
-/// ==========================================
-// 1. receivePulse() : アナログ読み取りとエッジ検出
+// ==========================================
+// 1. receivePulse() : アナログ読み取りとエッジ検出（デジタルフィルタ追加）
 // ==========================================
 void receivePulse() {
   int sensorValue = analogRead(SENSOR_PIN);
-  bool currentSensorState = (sensorValue > THRESHOLD);
+  bool currentSensorState = false; // とりあえず初期値はfalseにしておく
 
+  // 【追加】究極のソフトウェア・ダブルチェック
+  if (sensorValue > THRESHOLD) {
+    // しきい値を超えたが電気ノイズ（火花）かもしれない，
+    // 50マイクロ秒だけ待って「本当にまだ光が当たっているか」を再確認
+    delayMicroseconds(50); 
+    
+    int confirmValue = analogRead(SENSOR_PIN);
+    if (confirmValue > THRESHOLD) {
+      currentSensorState = true; // 50us後も超えていれば，本物のスリットだと認める
+    }
+  }
+
+  // 立ち上がりエッジの検出
   if (!lastSensorState && currentSensorState) {
     unsigned long currentTime = micros(); 
     
@@ -78,7 +89,7 @@ void receivePulse() {
       pulseDetected = true; 
       lastPulseTime = currentTime;
 
-      // ★追加：最初の1回目の検知は、時間を記録するだけでスキップする
+      // 最初の1回目の検知は、時間を記録するだけでスキップする
       if (previousSlitTime == 0) {
         previousSlitTime = currentTime;
       } 
@@ -158,14 +169,14 @@ void ReverseBrake() {
 }
 
 // ==========================================
-// ★追加 5. readTargetBPM() : 目標BPM読み取り関数
+// 5. readTargetBPM() : 目標BPM読み取り関数
 // ==========================================
 float readTargetBPM() {
   int rawValue = analogRead(POT_PIN); // 0 〜 1023 を取得
   
   // 0〜1023のアナログ値を、BPM 100 〜 160 の範囲に変換する
   // ※可変抵抗の向きが逆(回すと下がる)場合は、map(rawValue, 0, 1023, 160, 100); にしてください
-  long mappedBPM = map(rawValue, 0, 1023, 100, 160);
+  long mappedBPM = map(rawValue, 0, 1023, 80, 160);
   
   return (float)mappedBPM;
 }
