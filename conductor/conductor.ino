@@ -161,7 +161,7 @@ void receivePulse() {
 // --- 目標BPM読み取り ---
 float readTargetBPM() {
   int rawValue = analogRead(POT_PIN); 
-  long mappedBPM = map(rawValue, 0, 1023, 100, 160);
+  long mappedBPM = map(rawValue, 0, 1023, 80, 160);
   return (float)mappedBPM;
 }
 
