@@ -122,14 +122,16 @@ void receivePulse() {
 // ==========================================
 void updatePWM(int pwmValue) {
   if (pwmValue <= 0) {
-    digitalWrite(MOTOR_IN1, HIGH);
-    digitalWrite(MOTOR_IN2, HIGH);
+    // digitalWriteの代わりに、analogWriteの255(HIGH)を使用する
+    analogWrite(MOTOR_IN1, 255);
+    analogWrite(MOTOR_IN2, 255);
     currentPWM = 0;
   } 
   else {
     pwmValue = constrain(pwmValue, 0, 255);
     analogWrite(MOTOR_IN1, pwmValue);
-    digitalWrite(MOTOR_IN2, LOW);
+    // digitalWriteの代わりに、analogWriteの0(LOW)を使用する
+    analogWrite(MOTOR_IN2, 0); 
     currentPWM = pwmValue;
   }
 }
@@ -160,13 +162,19 @@ int updatePID(float targetBPM, float currentBPM) {
 // 4. ReverseBrake() : 停止時ブレーキ関数
 // ==========================================
 void ReverseBrake() {
-  digitalWrite(MOTOR_IN1, LOW);
-  analogWrite(MOTOR_IN2, 255);
+  // 逆相ブレーキ (フルパワーで逆回転)
+  analogWrite(MOTOR_IN1, 0);   // LOWの代わり
+  analogWrite(MOTOR_IN2, 255); // HIGHの代わり
+  
+  // ★ここの数値(ms)をテスト結果に合わせて調整します
   delay(50); 
-  digitalWrite(MOTOR_IN1, HIGH);
-  digitalWrite(MOTOR_IN2, HIGH);
+  
+  // ショートブレーキ (ガッチリ固定する)
+  analogWrite(MOTOR_IN1, 255); // HIGHの代わり
+  analogWrite(MOTOR_IN2, 255); // HIGHの代わり
   currentPWM = 0;
 }
+
 
 // ==========================================
 // 5. readTargetBPM() : 目標BPM読み取り関数
