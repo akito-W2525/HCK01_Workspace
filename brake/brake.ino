@@ -1,30 +1,35 @@
 // --- ピン定義 ---
-const int SENSOR_PIN = A0; // フォトインタラプタのアナログピン
-const int MOTOR_IN1 = 9;   // モータードライバ IN1
-const int MOTOR_IN2 = 10;  // モータードライバ IN2
+const int SENSOR_PIN = A0; 
+const int POT_PIN = A1;    // 可変抵抗のアナログピン
+const int MOTOR_IN1 = 9;   
+const int MOTOR_IN2 = 10;  
 
 // --- しきい値と状態管理 ---
-const int THRESHOLD = 300;     // 50と600の中間あたり
-bool lastSensorState = false;  // 前回のセンサ状態
-unsigned long lastPulseTime = 0; // チャタリング防止用
-bool pulseDetected = false;    // 拍検知フラグ
+const int THRESHOLD = 300;     
+bool lastSensorState = false;  
+unsigned long lastPulseTime = 0; 
+bool pulseDetected = false;    
 
 // --- 拍カウントとBPM計算用変数 ---
-int slitCount = 0;                  // スリットの通過回数を数える
-unsigned long previousSlitTime = 0; // スリット間隔（duration）計測用
-float currentBPM = 0.0;             // 計算された現在のBPM
-unsigned long currentDuration = 0;  // 計算された現在のスリット間隔(マイクロ秒)
+int slitCount = 0;                  
+unsigned long previousSlitTime = 0; 
+float currentBPM = 0.0;             
+unsigned long currentDuration = 0;  
+int beatcount  = 40;
 
-// --- ★ブレーキテスト用追加変数 ---
-bool isMotorRunning = false;      // モーターが回転中かどうか
-bool isBraking = false;           // ブレーキテスト中かどうか
-unsigned long brakeStartTime = 0; // ブレーキをかけた時刻(ミリ秒)
-int extraSlitCount = 0;           // ブレーキ後の余分な拍（スリット）の数
+// --- ★ブレーキテスト用変数 ---
+bool isMotorRunning = true;       // モータが回転中か
+bool isBraking = false;           // ブレーキテスト中か
+unsigned long brakeStartTime = 0; // ブレーキ開始時刻
+int extraSlitCount = 0;           // ブレーキ後の余分な拍
 
 // --- PIDとPWM用変数 ---
 int currentPWM = 0;
-float targetBPM = 120.0;       
-float Kp = 1.0, Ki = 0.1, Kd = 0.05;
+float targetBPM = 120.0; 
+// ★決定したゲインパラメータ（そのまま維持）
+float Kp = 0.05;  // 比例
+float Ki = 0.02;  // 積分
+float Kd = 0;     // 微分
 float integral = 0, previous_error = 0;
 
 void setup() {
@@ -34,10 +39,13 @@ void setup() {
 
   Serial.println("=====================================");
   Serial.println("  Reverse Brake Test Ready.");
-  Serial.println("  シリアルモニタから以下の文字を送信してください：");
-  Serial.println("  [g] : モーター回転スタート");
+  Serial.println("  [g] : モータ回転スタート");
   Serial.println("  [s] : 逆相ブレーキ作動 (Stop)");
   Serial.println("=====================================");
+  
+  // 初期ベースパワーで回り始める（ブースト）
+  updatePWM(100); 
+  delay(800); // 最初の0.5秒間(プログラム上は0.8秒)はフルパワーで勢いをつける！
 }
 
 void loop() {
@@ -50,12 +58,17 @@ void loop() {
     
     // 'g' が送信されたらスタート
     if (cmd == 'g' || cmd == 'G') {
-      Serial.println("\n>>> 回転スタート <<<");
+      Serial.println("\n>>> モータ回転スタート <<<");
       slitCount = 0;
       extraSlitCount = 0;
+      integral = 0; // PIDの積分をリセット
+      previousSlitTime = 0; // 時間計測リセット
       isMotorRunning = true;
       isBraking = false;
-      updatePWM(200); // 200のスピードで回す（適宜調整してください）
+      
+      // 再始動時のブースト
+      updatePWM(100); 
+      delay(800);
     } 
     // 's' が送信されたらブレーキテスト開始
     else if (cmd == 's' || cmd == 'S') {
@@ -64,23 +77,29 @@ void loop() {
         ReverseBrake(); 
         isMotorRunning = false;
         isBraking = true;
-        brakeStartTime = millis(); // ブレーキ開始時刻を記録
+        brakeStartTime = millis(); 
       }
     }
   }
 
   // 3. 拍（スリット）が検知されたら実行される処理
   if (pulseDetected) {
-    pulseDetected = false; // フラグをリセット
+    pulseDetected = false; 
     
     if (isMotorRunning) {
-      // 通常回転中の検知（回転中の様子を確認用）
-      Serial.print("S:");
-      Serial.print(slitCount);
-      Serial.print(" D(us):");
-      Serial.print(currentDuration);
-      Serial.print(" BPM:");
-      Serial.println(currentBPM);
+      // 回転中の表示（安定状態の確認用）
+      Serial.print("Target:");
+      Serial.print(targetBPM);
+      Serial.print(",");
+      Serial.print("Current:");
+      Serial.print(currentBPM);
+      Serial.print(",");
+      Serial.print("PWM:");
+      Serial.println(currentPWM);
+
+      if (slitCount >= beatcount) {
+        slitCount = 0; 
+      }
     } 
     else if (isBraking) {
       // ブレーキ作動中の検知（＝余分な拍）
@@ -91,9 +110,9 @@ void loop() {
     }
   }
 
-  // 4. ブレーキ作動から2秒（2000ms）経過したら結果を発表
+  // 4. ブレーキ作動から2秒経過したら結果を発表
   if (isBraking && (millis() - brakeStartTime > 2000)) {
-    isBraking = false; // テスト終了
+    isBraking = false; 
     
     Serial.println("\n--- ブレーキテスト結果 ---");
     if (extraSlitCount == 0) {
@@ -101,7 +120,7 @@ void loop() {
     } else {
       Serial.print("【不合格】余分な拍が ");
       Serial.print(extraSlitCount);
-      Serial.println(" 回発生しました．");
+      Serial.println(" 回発生しました．慣性で空回りしています．");
       Serial.println(" -> ReverseBrake() 内の delay(50) の数値を調整してください．");
     }
     Serial.println("=====================================");
@@ -110,32 +129,55 @@ void loop() {
 }
 
 // ==========================================
-// 1. receivePulse() : アナログ読み取りとエッジ検出 (超高精度版)
+// 1. receivePulse() : アナログ読み取りとエッジ検出（デジタルフィルタ維持）
 // ==========================================
 void receivePulse() {
   int sensorValue = analogRead(SENSOR_PIN);
-  bool currentSensorState = (sensorValue > THRESHOLD);
+  bool currentSensorState = false; // とりあえず初期値はfalseにしておく
 
+  // 究極のソフトウェア・ダブルチェック
+  if (sensorValue > THRESHOLD) {
+    // しきい値を超えた！でも電気ノイズ（火花）かもしれないので...
+    // 50マイクロ秒だけ待って「本当にまだ光が当たっているか」を再確認します。
+    delayMicroseconds(50); 
+    
+    int confirmValue = analogRead(SENSOR_PIN);
+    if (confirmValue > THRESHOLD) {
+      currentSensorState = true; // 50us後も超えていれば、本物のスリットだと認める
+    }
+  }
+
+  // 立ち上がりエッジの検出
   if (!lastSensorState && currentSensorState) {
-    // micros() を使う（マイクロ秒単位で取得）
     unsigned long currentTime = micros(); 
     
-    // チャタリング防止の1ms（1,000us）
     if (currentTime - lastPulseTime > 1000) {
       pulseDetected = true; 
       lastPulseTime = currentTime;
 
-      unsigned long duration = currentTime - previousSlitTime;
-      previousSlitTime = currentTime;
+      // 最初の1回目の検知は、時間を記録するだけでスキップする
+      if (previousSlitTime == 0) {
+        previousSlitTime = currentTime;
+      } 
+      else {
+        unsigned long duration = currentTime - previousSlitTime;
+        previousSlitTime = currentTime;
 
-      // 上限の2000msも、マイクロ秒（2,000,000us）に直す
-      if (duration > 0 && duration < 2000000) {
-        // ループで表示するためにグローバル変数に保存
-        currentDuration = duration; 
-        
-        // 計算用定数を1000倍する (1875.0 * 1000 = 1875000.0)
-        currentBPM = 1875000.0 / (float)duration;
-        slitCount++; 
+        if (duration > 0 && duration < 2000000) {
+          currentDuration = duration; 
+          
+          // BPMの計算 (8分音符基準)
+          currentBPM = ( 60000000.0 / ((float)duration * beatcount * 2));
+          slitCount++;
+
+          // 毎スリットごとに可変抵抗を読み取って目標BPMを更新する
+          targetBPM = readTargetBPM();
+
+          // モータ回転中のみPIDを呼び出し、速度を自動調整
+          if (isMotorRunning) {
+            updatePID(targetBPM, currentBPM);
+          }
+        }
       }
     }
   }
@@ -144,41 +186,71 @@ void receivePulse() {
 }
 
 // ==========================================
-// 2. updatePWM() : モーター出力制御関数
+// 2. updatePWM() : 自動ブレーキ機能付き
 // ==========================================
 void updatePWM(int pwmValue) {
-  pwmValue = constrain(pwmValue, 0, 255);
-  analogWrite(MOTOR_IN1, pwmValue);
-  digitalWrite(MOTOR_IN2, LOW);
-  currentPWM = pwmValue;
+  if (pwmValue <= 0) {
+    // digitalWriteの代わりに、analogWriteの255(HIGH)を使用する
+    analogWrite(MOTOR_IN1, 255);
+    analogWrite(MOTOR_IN2, 255);
+    currentPWM = 0;
+  } 
+  else {
+    pwmValue = constrain(pwmValue, 0, 255);
+    analogWrite(MOTOR_IN1, pwmValue);
+    // digitalWriteの代わりに、analogWriteの0(LOW)を使用する
+    analogWrite(MOTOR_IN2, 0); 
+    currentPWM = pwmValue;
+  }
 }
 
 // ==========================================
-// 3. updatePID() : 回転速度安定化関数
+// 3. updatePID() : ベースパワー追加版（そのまま維持）
 // ==========================================
 int updatePID(float targetBPM, float currentBPM) {
   float error = targetBPM - currentBPM;
   integral += error;
+  
+  integral = constrain(integral, -2000, 2000);
+
   float derivative = error - previous_error;
 
-  float output = (Kp * error) + (Ki * integral) + (Kd * derivative);
+  int basePWM = 40; 
+
+  float output = basePWM + (Kp * error) + (Ki * integral) + (Kd * derivative);
   previous_error = error;
 
-  int newPWM = currentPWM + (int)output;
-  newPWM = constrain(newPWM, 0, 255);
+  int newPWM = (int)output; 
 
   updatePWM(newPWM);
   return newPWM;
 }
 
 // ==========================================
-// 4. ReverseBrake() : 停止時ブレーキ関数
+// 4. ReverseBrake() : 停止時ブレーキ関数（Uno R4 WiFi完全対応版）
 // ==========================================
 void ReverseBrake() {
-  digitalWrite(MOTOR_IN1, LOW);
-  analogWrite(MOTOR_IN2, 255);
-  delay(100); // ★ここの数値を変更して調整します
-  digitalWrite(MOTOR_IN1, HIGH);
-  digitalWrite(MOTOR_IN2, HIGH);
+  // 逆相ブレーキ (フルパワーで逆回転)
+  analogWrite(MOTOR_IN1, 0);   // LOWの代わり
+  analogWrite(MOTOR_IN2, 255); // HIGHの代わり
+  
+  // ★ここの数値(ms)をテスト結果に合わせて調整します
+  delay(50); 
+  
+  // ショートブレーキ (ガッチリ固定する)
+  analogWrite(MOTOR_IN1, 255); // HIGHの代わり
+  analogWrite(MOTOR_IN2, 255); // HIGHの代わり
   currentPWM = 0;
+}
+
+// ==========================================
+// 5. readTargetBPM() : 目標BPM読み取り関数（そのまま維持）
+// ==========================================
+float readTargetBPM() {
+  int rawValue = analogRead(POT_PIN); // 0 〜 1023 を取得
+  
+  // 0〜1023のアナログ値を、BPM 100 〜 160 の範囲に変換する
+  long mappedBPM = map(rawValue, 0, 1023, 100, 160);
+  
+  return (float)mappedBPM;
 }
