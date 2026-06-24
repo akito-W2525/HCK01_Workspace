@@ -1,5 +1,5 @@
 // ==========================================
-// 楽器側メインシステム (テスト楽器・輪唱対応版)
+// 楽器側メインシステム (本番・輪唱対応版)
 // ==========================================
 
 // --- ピン定義 ---
@@ -13,7 +13,9 @@ unsigned long previousSlitTime = 0;
 
 // --- 拍カウント用変数 ---
 bool pulseDetected = false;    
-unsigned long beatInterval = 0; // スリット1つあたりの時間（ミリ秒）
+unsigned long beatInterval = 0; // 1拍（40スリット分）の時間（ミリ秒）
+int slitCount = 0;              // スリットのカウント
+const int beatcount = 40;       // 40回で1音(1拍)とする
 
 // --- 楽譜・ノート定義 ---
 struct Note {
@@ -22,7 +24,7 @@ struct Note {
   byte velocity;
 };
 
-// 楽器の楽譜（1 = スリット1つ分 / 8分音符相当）
+// 楽器の楽譜（1 = スリット40回分 / 8分音符相当）
 Note Melody[] = {
   {60, 2, 200}, {62, 2, 200}, {64, 2, 200}, {65, 2, 200},
   {64, 2, 200}, {62, 2, 200}, {60, 2, 200}, {128,  2, 0},
@@ -48,7 +50,7 @@ void loop() {
   // 1. 常にセンサの値を読み取り、ノイズを除去してスリットを検知
   receivePulse();
 
-  // 2. スリットが検知（= 1拍進行）されたら楽譜を進める
+  // 2. ★40スリット検知（= 1拍進行）されたら楽譜を進める
   if (pulseDetected) {
     pulseDetected = false;
 
@@ -71,7 +73,7 @@ void loop() {
 }
 
 // ==========================================
-// UDP/Processing送信関数（チームメンバー作成）
+// UDP/Processing送信関数
 // ==========================================
 void sendNote(Note note) {
   // 楽譜の音長と拍の間隔をかけて ms に変換
@@ -88,7 +90,7 @@ void sendNote(Note note) {
 }
 
 // ==========================================
-// センサー読み取り関数（指揮者側システムと同等の究極ノイズ除去）
+// センサー読み取り関数（40スリットで1拍カウント）
 // ==========================================
 void receivePulse() {
   int sensorValue = analogRead(SENSOR_PIN);
@@ -121,14 +123,21 @@ void receivePulse() {
 
         // durationが2秒未満なら正常なスリット間隔として処理
         if (duration > 0 && duration < 2000000) {
-          // ★ここで duration(マイクロ秒) をミリ秒に変換し、音の長さを決定する
-          beatInterval = duration / 1000;
-          
-          pulseDetected = true; // Loop関数に「拍が進んだ」ことを知らせる
+          slitCount++; // スリット通過回数をカウント
+
+          // ★ 40回スリットを検知したら「1音（1拍）」としてProcessingへ知らせる
+          if (slitCount >= beatcount) {
+            // 1拍の長さをミリ秒に変換 (duration(us) * 40回 / 1000)
+            beatInterval = (duration * beatcount) / 1000;
+            
+            pulseDetected = true; 
+            slitCount = 0; // カウントリセット
+          }
         } 
         else {
           // 指揮者側のキュー出し待ち等で長時間空いた場合はリセット
           previousSlitTime = currentTime;
+          slitCount = 0; // ★カウントもリセットして次の指示に備える
         }
       }
     }
