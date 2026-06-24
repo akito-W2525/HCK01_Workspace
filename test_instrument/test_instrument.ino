@@ -1,5 +1,5 @@
 // ==========================================
-// 楽器側メインシステム (シリアルモニタ確認用テスト版)
+// 楽器側メインシステム (シリアルモニタ視覚的テスト版)
 // ==========================================
 
 // --- ピン定義 ---
@@ -11,9 +11,11 @@ bool lastSensorState = false;
 unsigned long lastPulseTime = 0; 
 unsigned long previousSlitTime = 0; 
 
-// --- 拍カウント用変数 ---
+// --- 拍カウントとBPM計算用変数 ---
 bool pulseDetected = false;    
-unsigned long beatInterval = 0; // スリット1つあたりの時間（ミリ秒）
+unsigned long beatInterval = 0; 
+float currentBPM = 0.0;     // ★追加：BPM計算用
+int beatcount = 40;         // ★追加：指揮者側と同じスリット数
 
 // --- 楽譜・ノート定義 ---
 struct Note {
@@ -41,11 +43,9 @@ int beatCounter = 0;
 
 void setup() {
   Serial.begin(115200); 
-  Serial.println("=========================================");
-  Serial.println("Instrument Test Mode Started.");
-  Serial.println("Waiting for slits...");
-  Serial.println("=========================================");
+  Serial.println("Ready.");
 }
+
 void loop() {
   // 1. 常にセンサの値を読み取り、ノイズを除去してスリットを検知
   receivePulse();
@@ -58,7 +58,7 @@ void loop() {
     if (beatCounter <= 0) {
       Note n = Melody[currentNoteIndex];
       
-      // ★機械語ではなく、人間が読める形式でシリアルモニタに出力
+      // 音が切り替わるタイミングで表示
       printNote(n);
       
       beatCounter = n.length;
@@ -66,41 +66,35 @@ void loop() {
       
       if (currentNoteIndex >= melodyLength) {
         currentNoteIndex = 0;
-        Serial.println("--- 楽譜ループ ---");
+        Serial.println("--- LOOP ---");
       }
+    } else {
+      // ★音が伸びている最中（スリット通過）を視覚的なバーで表現
+      Serial.println("  |");
     }
     beatCounter--;
   }
 }
 
 // ==========================================
-// シリアルモニタ確認用 出力関数（英語化）
+// シリアルモニタ確認用 出力関数
 // ==========================================
 void printNote(Note note) {
-  unsigned long duration_ms = beatInterval * note.length;
-
-  Serial.print("> PLAY | "); 
-  
   if (note.velocity == 0) {
-    Serial.print("REST (Pitch:");
-    Serial.print(note.pitch);
-    Serial.print(")  ");
+    Serial.print("[REST]   "); // 休符
   } else {
-    Serial.print("Pitch: ");
+    Serial.print("[NOTE:");    // 発音
     Serial.print(note.pitch);
-    Serial.print("    ");
+    Serial.print("] ");
   }
-
-  Serial.print("| Length: ");
-  Serial.print(note.length);
-  Serial.print(" | Actual_Time: ");
-  Serial.print(duration_ms);
-  Serial.print(" ms | Velocity: ");
-  Serial.println(note.velocity);
+  
+  // BPMの表示
+  Serial.print(" BPM:");
+  Serial.println(currentBPM);
 }
 
 // ==========================================
-// センサー読み取り関数内（文字出力部分の英語化）
+// センサー読み取り関数内
 // ==========================================
 void receivePulse() {
   int sensorValue = analogRead(SENSOR_PIN);
@@ -122,7 +116,6 @@ void receivePulse() {
 
       if (previousSlitTime == 0) {
         previousSlitTime = currentTime;
-        Serial.println("[System] First slit detected."); // 英語化
       } 
       else {
         unsigned long duration = currentTime - previousSlitTime;
@@ -130,15 +123,14 @@ void receivePulse() {
 
         if (duration > 0 && duration < 2000000) {
           beatInterval = duration / 1000;
-          pulseDetected = true; 
           
-          Serial.print("[Sensor] Slit -> Interval: "); // 英語化
-          Serial.print(beatInterval);
-          Serial.println(" ms");
+          // ★指揮者側と同じ計算式でBPMを算出
+          currentBPM = (60000000.0 / ((float)duration * beatcount * 2));
+          
+          pulseDetected = true; 
         } 
         else {
           previousSlitTime = currentTime;
-          Serial.println("[System] Long gap detected. Resetting timing."); // 英語化
         }
       }
     }
