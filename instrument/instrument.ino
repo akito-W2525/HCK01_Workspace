@@ -1,5 +1,5 @@
 // ==========================================
-// 楽器側メインシステム (本番・輪唱対応版)
+// 楽器側メインシステム (本番・輪唱対応 1ループ終了版)
 // ==========================================
 
 // --- ピン定義 ---
@@ -40,6 +40,7 @@ Note Melody[] = {
 const int melodyLength = sizeof(Melody) / sizeof(Melody[0]);
 int currentNoteIndex = 0;
 int beatCounter = 0;
+bool isFinished = false; // ★追加：1ループ演奏が終わったかどうかのフラグ
 
 void setup() {
   Serial.begin(115200); 
@@ -54,21 +55,24 @@ void loop() {
   if (pulseDetected) {
     pulseDetected = false;
 
-    // 楽譜の進行とシリアル送信処理
-    if (beatCounter <= 0) {
-      Note n = Melody[currentNoteIndex];
-      sendNote(n);
-      
-      // 次の音へ進むためのカウントを設定
-      beatCounter = n.length;
-      currentNoteIndex++;
-      
-      // 楽譜の最後まで来たら最初に戻る
-      if (currentNoteIndex >= melodyLength) {
-        currentNoteIndex = 0;
+    // ★演奏が終了していない場合のみ音を送る
+    if (!isFinished) {
+      // 楽譜の進行とシリアル送信処理
+      if (beatCounter <= 0) {
+        Note n = Melody[currentNoteIndex];
+        sendNote(n);
+        
+        // 次の音へ進むためのカウントを設定
+        beatCounter = n.length;
+        currentNoteIndex++;
+        
+        // ★修正：楽譜の最後まで来たら演奏終了フラグを立てる（最初に戻らない）
+        if (currentNoteIndex >= melodyLength) {
+          isFinished = true;
+        }
       }
+      beatCounter--;
     }
-    beatCounter--;
   }
 }
 
@@ -137,7 +141,12 @@ void receivePulse() {
         else {
           // 指揮者側のキュー出し待ち等で長時間空いた場合はリセット
           previousSlitTime = currentTime;
-          slitCount = 0; // ★カウントもリセットして次の指示に備える
+          slitCount = 0; 
+          
+          // ★追加：長期間空いたら楽譜の進行もリセットし、次回の演奏に備える
+          currentNoteIndex = 0;
+          beatCounter = 0;
+          isFinished = false;
         }
       }
     }
