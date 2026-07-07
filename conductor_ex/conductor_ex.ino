@@ -19,7 +19,7 @@ const int PIN_MELO_2 = 5; // 主旋律2
 const int PIN_MELO_3 = 6; // 主旋律3
 
 // --- 輪唱・演奏タイミング設定 ---
-const int SLITS_PER_MEASURE = 320;
+const int SLITS_PER_MEASURE = 360;
 const int COUNT_IN_SLITS = 40; 
 unsigned long totalSlitCount = 0; 
 

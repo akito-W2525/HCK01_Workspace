@@ -18,7 +18,7 @@ unsigned long previousSlitTime = 0;
 bool pulseDetected = false;    
 unsigned long beatInterval = 0; // 1拍（40スリット分）の時間（ミリ秒）
 int slitCount = 0;              // スリットのカウント
-const int beatcount = 40;       // 40回で1音(1拍)とする
+const int beatcount = 45;       // 45回で1音(1拍)とする
 
 // --- 楽譜・ノート定義 ---
 struct Note {
@@ -193,7 +193,7 @@ void sendNote(Note note) {
 }
 
 // ==========================================
-// センサー読み取り関数（40スリットで1拍カウント）
+// センサー読み取り関数（45スリットで1拍カウント）
 // ==========================================
 void receivePulse() {
   int sensorValue = analogRead(SENSOR_PIN);
@@ -223,7 +223,7 @@ void receivePulse() {
         if (duration > 0 && duration < 2000000) {
           slitCount++; 
 
-          // ★スリットを正常に読み取っている ＝ 演奏中状態にする
+          // スリットを正常に読み取っている ＝ 演奏中状態にする
           if (currentState == STATE_STANDBY && !isFinished) {
             setSystemState(STATE_PLAYING);
           }
@@ -243,7 +243,7 @@ void receivePulse() {
           beatCounter = 0;
           isFinished = false;
           
-          // ★長時間止まったら待機状態（オタマジャクシ）へ
+          // 長時間止まったら待機状態（オタマジャクシ）へ
           setSystemState(STATE_STANDBY);
         }
       }
