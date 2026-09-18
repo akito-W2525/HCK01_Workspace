@@ -16,7 +16,7 @@ unsigned long previousSlitTime = 0;
 
 // --- 拍カウント用変数 ---
 bool pulseDetected = false;    
-unsigned long beatInterval = 0; // 1拍（40スリット分）の時間（ミリ秒）
+unsigned long beatInterval = 0; // 1拍（45スリット分）の時間（ミリ秒）
 int slitCount = 0;              // スリットのカウント
 const int beatcount = 45;       // 45回で1音(1拍)とする
 
@@ -27,7 +27,7 @@ struct Note {
   byte velocity;
 };
 
-// 楽器の楽譜（1 = スリット40回分 / 8分音符相当）
+// 楽器の楽譜（1 = スリット45回分 / 8分音符相当）
 Note Melody[] = {
   {60, 2, 200}, {62, 2, 200}, {64, 2, 200}, {65, 2, 200},
   {64, 2, 200}, {62, 2, 200}, {60, 2, 200}, {128,  2, 0},
@@ -99,7 +99,7 @@ void loop() {
   // 1. 常にセンサの値を読み取り、ノイズを除去してスリットを検知
   receivePulse();
 
-  // 2. 40スリット検知（= 1拍進行）されたら楽譜を進める
+  // 2. 45スリット検知（= 1拍進行）されたら楽譜を進める
   if (pulseDetected) {
     pulseDetected = false;
 
@@ -109,7 +109,7 @@ void loop() {
         Note n = Melody[currentNoteIndex];
         sendNote(n);
         
-        // ★ 音が鳴る（休符でない）ならカエルの口を開ける
+        // 音が鳴る（休符でない）ならカエルの口を開ける
         if (n.velocity > 0) {
           isMouthOpen = true;
           mouthOpenTime = millis();
@@ -180,7 +180,7 @@ void updateLEDAnimation() {
 }
 
 // ==========================================
-// UDP/Processing送信関数
+// Processingへのノート送信関数（シリアル経由）
 // ==========================================
 void sendNote(Note note) {
   int duration_ms = beatInterval * note.length;

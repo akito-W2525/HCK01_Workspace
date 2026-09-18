@@ -81,15 +81,8 @@ void loop() {
 void printNote(Note note) {
   // 余計な情報を削り、タイミングとBPMを視覚的に強調
   Serial.print("【 ★ BEAT 】 BPM: ");
-  Serial.print(currentBPM);
-  Serial.print("  |  ");
+  Serial.println(currentBPM);
   
-  if (note.velocity == 0) {
-    Serial.println("REST (休符)");
-  } else {
-    Serial.print("PLAY -> Pitch: ");
-    Serial.println(note.pitch);
-  }
 }
 
 // ==========================================

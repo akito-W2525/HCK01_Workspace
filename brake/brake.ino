@@ -235,7 +235,7 @@ void ReverseBrake() {
   analogWrite(MOTOR_IN2, 255); // HIGHの代わり
   
   // ★ここの数値(ms)をテスト結果に合わせて調整します
-  delay(50); 
+  delay(100); 
   
   // ショートブレーキ (ガッチリ固定する)
   analogWrite(MOTOR_IN1, 255); // HIGHの代わり

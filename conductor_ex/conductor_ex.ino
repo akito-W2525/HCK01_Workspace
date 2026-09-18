@@ -86,7 +86,7 @@ void setup() {
 
   Serial.println("Target,Current,PWM"); 
   
-  updatePWM(100); 
+  updatePWM(250); 
   delay(800);
 }
 
@@ -213,6 +213,8 @@ void handleSwitch() {
 // --- センサー検知とBPM計算・輪唱キュー出し ---
 void receivePulse() {
   int sensorValue = analogRead(SENSOR_PIN);
+
+
   bool currentSensorState = false;
   if (sensorValue > THRESHOLD) {
     delayMicroseconds(10); 
