@@ -1,10 +1,10 @@
 
-
 # スリット円盤で同期する Arduino オーケストラ
 
 回転する**スリット円盤を「指揮者」**にして、複数台の Arduino 楽器を無線・有線通信なしで同期させ、「かえるの合唱」を輪唱する機械式オーケストラです。
 
-<!-- TODO: 演奏動画をここに貼る（GitHub の編集画面に動画ファイルをドラッグ＆ドロップすると URL が挿入される） -->
+https://github.com/user-attachments/assets/d6aed558-e62d-4049-ac66-89f44a1999bf
+
 
 ![システム全体の写真](docs/images/system_photo.jpg)
 
